@@ -22,9 +22,6 @@ SELECT OBJECT_ID, S_INFO_WINDCODE, TRADE_DT, CRNCY_CODE, S_DQ_PRECLOSE, S_DQ_OPE
 
 这个表有所有国际交易所的交易时段
 
-
-
-
 # 美股月频/周频策略动竞赛
 
 ## 需求发布日期
