@@ -28,7 +28,7 @@ class Config:
         GS_MINIO_PATH (str): Path configuration for the MinIO server.
     """
 
-    ModelPlatform = ModelPlatform.PYTHON_PLATFORM
+    ModelPlatform = ModelPlatform.LOCAL
 
     # Database connection settings
     DATABASES = {
@@ -67,13 +67,8 @@ class Config:
             "username": "gs",
             "password": "gtja990818",
         },
-        "bloomberg.ficc": {
-            "host": "10.187.129.188",
-            "port": 33061,
-            "database": "ficc",
-            "username": "root",
-            "password": "gTja@2020##",
-        },
+        "hdb_test": {"host": "114.141.180.69", "port": "21200", "username": "machenyu", "password": "machenyu"},
+        "hdb": {"host": "10.181.16.75", "port": "21200", "username": "machenyu", "password": "machenyu"},
     }
 
     # FTP server connection settings

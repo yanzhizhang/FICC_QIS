@@ -92,7 +92,7 @@ class WindDBClient:
         self.wind_db = MsSqlDB(Config.DATABASES["wind"])
 
     def get_wind_edb(self, indicator_code: str, start_date: str, end_date: str):
-        """获取wind EDB指标. 入参:指标代码,开始日期,结束日期,返回指标值和日期"""
+        """获取wind EDB指标。入参：指标代码，开始日期，结束日期，返回指标值和日期"""
         query = """
             SELECT TDATE, INDICATOR_NUM
             FROM gtjaedb
@@ -110,7 +110,7 @@ class WindDBClient:
         end_date: str,
     ):
         """
-        获取wind中债登债券收益率曲线. 入参:曲线代码(数值),曲线类型(1:即期,2:到期）,标准期限(年）
+        获取wind中债登债券收益率曲线。入参：曲线代码(数值)，曲线类型（1：即期，2：到期）,标准期限（年）
         Args:
             curve_code (str): The code for the bond curve.
             curve_type (int): The type of the curve (1 for spot, 2 for maturity).
@@ -133,7 +133,7 @@ class WindDBClient:
 
     def get_wind_bond_futures_price(self, code: str, price_type: str, start_date: str, end_date: str):
         """
-        获取wind股指期货日价格. 入参: code: 股指期货wind代码,priceType:str "S_DQ_SETTLE","S_DQ_OPEN","S_DQ_HIGH","S_DQ_LOW"
+        获取wind股指期货日价格。入参: code: 股指期货wind代码,price_type:str "S_DQ_SETTLE","S_DQ_OPEN","S_DQ_HIGH","S_DQ_LOW"
         """
         query = f"""
             SELECT TRADE_DT, {price_type}
@@ -145,7 +145,7 @@ class WindDBClient:
 
     def get_wind_commodity_futures_price(self, code: str, price_type: str, start_date: str, end_date: str):
         """
-        获取wind商品期货日价格. 入参: code: 商品期货wind代码,priceType:str "S_DQ_SETTLE","S_DQ_OPEN","S_DQ_HIGH","S_DQ_LOW"
+        获取wind商品期货日价格。入参: code: 商品期货wind代码,price_type:str "S_DQ_SETTLE","S_DQ_OPEN","S_DQ_HIGH","S_DQ_LOW"
         """
         query = f"""
             SELECT TRADE_DT, {price_type}
@@ -157,7 +157,7 @@ class WindDBClient:
 
     def get_wind_index_futures_price(self, code: str, price_type: str, start_date: str, end_date: str):
         """
-        获取wind股指期货日价格. 入参: code: 股指期货wind代码,priceType:str "S_DQ_SETTLE","S_DQ_OPEN","S_DQ_HIGH","S_DQ_LOW"
+        获取wind股指期货日价格。入参: code: 股指期货wind代码,price_type:str "S_DQ_SETTLE","S_DQ_OPEN","S_DQ_HIGH","S_DQ_LOW"
         """
         query = f"""
             SELECT TRADE_DT, {price_type}
@@ -169,7 +169,7 @@ class WindDBClient:
 
     def get_wind_bond_calendar(self, market_code: str, start_date: str = None, end_date: str = None):
         """
-        获取债券交易日历. 入参: market_code: 交易所市场简称 SSE:上交所 SZSE:深交所 NIB:银行间市场 NBC:柜台交易市场. 
+        获取债券交易日历。入参: market_code: 交易所市场简称 SSE:上交所 SZSE:深交所 NIB:银行间市场 NBC:柜台交易市场。
         start_date,endDate格式为 YYYYMMDD
         """
         if start_date is None and end_date is None:
@@ -209,7 +209,7 @@ class WindDBClient:
 
     def get_wind_future_calendar(self, market_code: str, start_date: str = None, end_date: str = None):
         """
-        获取期货交易日历. 入参: market_code: 交易所市场简称 SSE:上交所 SZSE:深交所 NIB:银行间市场 NBC:柜台交易市场. 
+        获取期货交易日历。入参: market_code: 交易所市场简称 SSE:上交所 SZSE:深交所 NIB:银行间市场 NBC:柜台交易市场。
         start_date,endDate格式为 YYYYMMDD
         """
         if start_date is None and end_date is None:
@@ -251,14 +251,14 @@ class WindDBClient:
         """
         获取对应日期可交易合约的代码
         Args:
-            future_code (str): 合约类型,10年期国债期货为'T'.
+            future_code (str): 合约类型，10年期国债期货为'T'.
             date (str): The reference date in 'YYYYMMDD' format.
 
         Returns:
             list: A list of tradable contract codes that match the criteria.
         """
 
-        query = f"""
+        query = """
             SELECT S_INFO_WINDCODE
             FROM CFuturesDescription
             WHERE FS_INFO_SCCODE = %s AND S_INFO_LISTDATE <= %s and S_INFO_DELISTDATE>= %s
@@ -306,13 +306,218 @@ class WindDBClient:
             list: A list of tuples containing the trade date and the specified bond repo rate.
         """
 
-        query = f"""
+        query = """
             SELECT TRADE_DT as TDATE,B_TENDER_INTERESTRATE as INDICATOR_NUM
             FROM CBondRepo
             WHERE B_INFO_TERM = %s AND B_INFO_REPO_TYPE = %s AND TRADE_DT >= %s AND TRADE_DT <= %s
             ORDER BY TRADE_DT
         """
         return self.wind_db.fetch_all(query, (term, repo_type, start_date, end_date))
+
+    def get_all_future_daily_info(
+        self,
+        start_date: str,
+        end_date: str,
+        excluded_future: list[str] = None,
+        included_exchange: list[str] = None,
+        additional_columns: list[str] = None,
+    ):
+        """
+        Fetches futures contract information for a given date range and exchange criteria.
+
+        Args:
+            start_date (str): Start date in 'YYYYMMDD' format (e.g., '20240101').
+            end_date (str): End date in 'YYYYMMDD' format (e.g., '20240131').
+            excluded_future (list[str]): List of future codes to exclude (e.g., ['TF2206']).
+            included_exchange (list[str]): List of exchanges to include (e.g., ['CFE', 'SHFE']).
+            additional_columns (list[str]): Additional columns to include in the query.
+
+        Returns:
+            pandas.DataFrame: DataFrame containing futures contract information.
+                - Columns include base and optionally specified columns.
+        """
+        # Base columns required for the query
+        base_columns = ["S_INFO_WINDCODE", "FS_INFO_SCCODE", "S_INFO_LISTDATE", "S_INFO_DELISTDATE"]
+
+        # Add additional columns if provided
+        if additional_columns:
+            base_columns.extend(additional_columns)
+
+        # Convert included and excluded lists to strings for SQL IN clause
+        included_exchange_clause = f"'{', '.join(included_exchange)}'" if included_exchange else "NULL"
+        excluded_future_clause = f"'{', '.join(excluded_future)}'" if excluded_future else "NULL"
+
+        # SQL query with safe parameter handling
+        query_sql = """
+            SELECT
+                CFD.S_INFO_WINDCODE,
+                S_INFO_CODE,
+                S_INFO_NAME,
+                FS_INFO_SCCODE,
+                S_INFO_EXCHMARKET,
+                S_INFO_LISTDATE,
+                S_INFO_DELISTDATE,
+                TRADE_DT,
+                S_DQ_PRESETTLE,
+                S_DQ_OPEN,
+                S_DQ_HIGH,
+                S_DQ_LOW,
+                S_DQ_CLOSE,
+                S_DQ_SETTLE,
+                S_DQ_VOLUME,
+                S_DQ_AMOUNT,
+                S_DQ_OI,
+                S_DQ_CHANGE,
+                S_DQ_OICHANGE
+            FROM
+                CFUTURESDESCRIPTION AS CFD
+            LEFT JOIN (
+                SELECT
+                    OBJECT_ID,
+                    S_INFO_WINDCODE,
+                    TRADE_DT,
+                    S_DQ_PRESETTLE,
+                    S_DQ_OPEN,
+                    S_DQ_HIGH,
+                    S_DQ_LOW,
+                    S_DQ_CLOSE,
+                    S_DQ_SETTLE,
+                    S_DQ_VOLUME,
+                    S_DQ_AMOUNT,
+                    S_DQ_OI,
+                    S_DQ_CHANGE,
+                    S_DQ_OICHANGE,
+                    FS_INFO_TYPE,
+                    OPDATE,
+                    OPMODE,
+                    'CCOMMODITYFUTURESEODPRICES' AS SOURCE_TYPE
+                FROM CCOMMODITYFUTURESEODPRICES
+                UNION ALL
+                SELECT
+                    OBJECT_ID,
+                    S_INFO_WINDCODE,
+                    TRADE_DT,
+                    S_DQ_PRESETTLE,
+                    S_DQ_OPEN,
+                    S_DQ_HIGH,
+                    S_DQ_LOW,
+                    S_DQ_CLOSE,
+                    S_DQ_SETTLE,
+                    S_DQ_VOLUME,
+                    S_DQ_AMOUNT,
+                    S_DQ_OI,
+                    S_DQ_CHANGE,
+                    NULL AS S_DQ_OICHANGE,
+                    FS_INFO_TYPE,
+                    OPDATE,
+                    OPMODE,
+                    'CBONDFUTURESEODPRICES' AS SOURCE_TYPE
+                FROM CBONDFUTURESEODPRICES
+            ) AS EODP ON CFD.S_INFO_WINDCODE = EODP.S_INFO_WINDCODE
+            WHERE
+                FS_INFO_TYPE1 = '2' AND TRADE_DT BETWEEN %s AND %s 
+                AND S_INFO_EXCHMARKET = N'CFFEX'
+                AND (FS_INFO_SCCODE like N'T%')
+                AND NOT (S_INFO_NAME LIKE N'%仿真%')
+            ORDER BY
+                TRADE_DT DESC,
+                S_DQ_AMOUNT DESC
+        """
+        # Execute query with parameter substitution
+        return self.wind_db.fetch_all(query_sql, (start_date, end_date, included_exchange_clause, excluded_future_clause))
+
+    def get_all_etf_daily_info(self, start_date: str, end_date: str):
+        """
+        Fetches ETF information for a given date range and exchange criteria.
+
+        Args:
+            start_date (str): Start date in 'YYYYMMDD' format (e.g., '20240101').
+            end_date (str): End date in 'YYYYMMDD' format (e.g., '20240131').
+            additional_columns (list[str]): Additional columns to include in the query.
+
+        Returns:
+            pandas.DataFrame: DataFrame containing futures contract information.
+                - Columns include base and optionally specified columns.
+        """
+        # SQL query with safe parameter handling
+        query_sql = """
+            SELECT
+                S_INFO_WINDCODE,
+                LEFT (
+                    S_INFO_WINDCODE,
+                    CHARINDEX ('.', S_INFO_WINDCODE) - 1
+                ) AS S_INFO_CODE,
+                S_INFO_WINDCODE AS S_INFO_NAME,
+                LEFT (
+                    S_INFO_WINDCODE,
+                    CHARINDEX ('.', S_INFO_WINDCODE) - 1
+                ) AS FS_INFO_SCCODE,
+                RIGHT (
+                    S_INFO_WINDCODE,
+                    LEN (S_INFO_WINDCODE) - CHARINDEX ('.', S_INFO_WINDCODE)
+                ) AS S_INFO_EXCHMARKET,
+                TRADE_DT AS S_INFO_LISTDAT,
+                TRADE_DT AS S_INFO_DELISTDATE,
+                TRADE_DT,
+                S_DQ_PRECLOSE AS S_DQ_PRESETTLE,
+                S_DQ_OPEN,
+                S_DQ_HIGH,
+                S_DQ_LOW,
+                S_DQ_CLOSE,
+                S_DQ_AVGPRICE AS S_DQ_SETTLE,
+                S_DQ_VOLUME,
+                S_DQ_AMOUNT,
+                0 AS S_DQ_OI,
+                S_DQ_CHANGE,
+                0 AS S_DQ_OICHANGE,
+                S_INFO_WINDCODE AS FUTURE_TICKER,
+                S_DQ_AVGPRICE AS VWAP
+            FROM
+                CHINACLOSEDFUNDEODPRICE
+            WHERE
+                S_INFO_WINDCODE IN (N'513100.SH', N'510300.SH', N'159920.SZ')
+                AND TRADE_DT BETWEEN %s AND %s 
+            ORDER BY
+                TRADE_DT DESC,
+                S_DQ_AMOUNT DESC
+        """
+        # Execute query with parameter substitution
+        return self.wind_db.fetch_all(query_sql, (start_date, end_date))
+
+    def get_us_stock_eod_prices(self, ticker_list: list[str], start_date: str, end_date: str):
+        """
+        Fetches US stock EOD information for a given date range and ticker criteria.
+        """
+        # Convert ticker_list to a string for SQL IN clause
+        tickers = ", ".join(f"'{ticker}'" for ticker in ticker_list)
+
+        # SQL query with safe parameter handling
+        query_sql = f"""
+            SELECT
+                LEFT (
+                    S_INFO_WINDCODE,
+                    CHARINDEX ('.', S_INFO_WINDCODE) - 1
+                ) AS TICKER,
+                TRADE_DT,
+                CRNCY_CODE,
+                S_DQ_PRECLOSE,
+                S_DQ_OPEN,
+                S_DQ_HIGH,
+                S_DQ_LOW,
+                S_DQ_CLOSE,
+                S_DQ_VOLUME,
+                S_DQ_ADJFACTOR,
+                S_DQ_PRECLOSE_WIND
+            FROM
+                USSTOCKEODPRICES
+            WHERE
+                S_INFO_WINDCODE IN ({tickers}) AND TRADE_DT BETWEEN %s AND %s 
+            ORDER BY
+                TRADE_DT DESC,
+                S_DQ_VOLUME DESC
+        """
+        # Execute query with parameter substitution
+        return self.wind_db.fetch_all(query_sql, (start_date, end_date))
 
 
 class FiccDBClient:
@@ -535,7 +740,7 @@ class GsDBClient:
         return symbols_ohlc_price_df
 
     def get_index_dk_weight(self, calculate_date, index_code):
-        query_sql = f"""
+        query_sql = """
             SELECT *
             FROM WB_INDEX_COMPONENT_GS
             WHERE tdate = %s AND inner_code = %s
@@ -549,7 +754,7 @@ class GsDBClient:
         return res
 
     def get_symbol_weight(self, calculate_date, index_code, symbol):
-        query_sql = f"""
+        query_sql = """
             SELECT abs(c_weight)
             FROM wb_index_component_gs
             WHERE tdate = %s AND inner_code = %s AND c_code = %s
@@ -563,7 +768,7 @@ class GsDBClient:
         return res
 
     def get_mapping_contract(self, code, contract_type, calculate_date):
-        query_sql = f"""
+        query_sql = """
             SELECT MAPPING_CODE
             FROM WB_FuturesContractMapping_GS
             WHERE code = %s AND type = %s AND tdate = %s
@@ -583,7 +788,7 @@ class GsDBClient:
 
         # Iterate through each item in dk_weight_dic to insert or update
         for index, value in dk_weight_dic.items():
-            Log.info(f"计算日:{calculate_date}, 成分合约:{index}, 多空权重:{value}")
+            Log.info(f"计算日：{calculate_date}, 成分合约：{index}, 多空权重：{value}")
 
             data = {
                 "tdate": calculate_date,
@@ -613,7 +818,7 @@ class GsDBClient:
         Log.info("指数点位开始存入数据库")
 
         # Log the details of the calculation
-        Log.info(f"计算日:{calculate_date}, 指数点位: {index_value}")
+        Log.info(f"计算日：{calculate_date}, 指数点位: {index_value}")
 
         # Get the current time for the update
         update_tm = dt.datetime.now(pytz.timezone("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S")

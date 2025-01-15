@@ -21,16 +21,15 @@ Log = Log()
 
 class DataProcessor:
     def __init__(self, calculate_date):
+        self.today_date = calculate_date
+        self.start_date = "20000101"
+        self.today_dt = dt.datetime.strptime(self.today_date, "%Y%m%d")
+
+    def init_data(self):
         self.wind_db_client = WindDBClient()
         self.ficc_db_client = FiccDBClient()
         self.trade_date_client = TradeDateHelper()
         self.gs_db_client = GsDBClient()
-
-        self.today_date = calculate_date
-        self.start_date = "20000101"
-
-        self.today_dt = dt.datetime.strptime(self.today_date, "%Y%m%d")
-
         # 因子: 9 month yield
         self.yield9m_series = self._get_yield9m()
         # 因子: zz_caifu_return_series
@@ -242,7 +241,7 @@ class DataProcessor:
             WindWSD:J(焦炭)
                 J.DCE
 
-            (1)按照主力合约列表,拼接构造结算价收益率序列;
+            (1)按照主力合约列表，拼接构造结算价收益率序列;
             (2)前步骤序列+1后计算累计乘积序列;
             (3)使用前步骤序列月度最后值进行月度重采样;
             (4)转换同比

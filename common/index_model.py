@@ -16,6 +16,47 @@ class BaseIndexModel:
     def __init__(self):
         pass
 
+    def single_factor_test(self, factor_column, target_column="DAILY_RETURN", rolling_window=30, correlation_threshold=0.02, method="pearson"):
+        """
+        Perform single-factor testing by calculating the correlation between a factor and the target variable.
+        Factors with rolling correlation below a specified threshold are excluded.
+
+        :param factor_column: The column name of the factor to be tested.
+        :param target_column: The column name of the target variable (e.g., returns).
+        :param rolling_window: The window size for calculating rolling correlations.
+        :param correlation_threshold: The minimum acceptable correlation for the factor to be retained.
+        :param method: Correlation method, either 'pearson' or 'spearman'.
+        :return: pd.DataFrame with rolling correlations and a mask for valid factors.
+        """
+        df = self.df
+
+        # Ensure the DataFrame is sorted by date for rolling calculations
+        df = df.sort_values(by=["FUTURE_TICKER", "TRADE_DT"])
+
+        # Calculate rolling correlation grouped by FUTURE_TICKER
+        df["ROLLING_CORRELATION"] = (
+            df.groupby("FUTURE_TICKER")
+            .apply(
+                lambda x: x[[factor_column, target_column]]
+                .rolling(window=rolling_window)
+                .corr(method=method)
+                .unstack()
+                .iloc[:, 1]
+            )
+            .reset_index(level=0, drop=True)
+        )
+
+        # Mask factors with correlation below the threshold
+        df["IS_VALID_FACTOR"] = df["ROLLING_CORRELATION"] >= correlation_threshold
+
+        # Filter the DataFrame to retain only valid factors
+        valid_factors_df = df[df["IS_VALID_FACTOR"]].copy()
+
+        self.df = valid_factors_df.sort_index()
+
+        return self.df
+
+
     def get_train_end_date(self, target_dt):
         target_month = target_dt.month
         month_dic = {
@@ -34,7 +75,7 @@ class BaseIndexModel:
         }
         train_month = month_dic[target_month]
         if target_month < train_month:
-            return dt.date(target_dt.year - 1, train_month, 2)  # 前面的都是月频数据,1号,截止训练日期定为2号
+            return dt.date(target_dt.year - 1, train_month, 2)  # 前面的都是月频数据,1号，截止训练日期定为2号
         else:
             return dt.date(target_dt.year, train_month, 2)
 
