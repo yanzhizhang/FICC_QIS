@@ -6,8 +6,9 @@ import pytz
 import rqdatac
 import datetime as dt
 import matplotlib.pyplot as plt
+import os
 
-start_date = 20180101
+start_date = 20150101
 end_date = dt.datetime.now(pytz.timezone("Asia/Shanghai")).strftime("%Y%m%d")
 
 rqdatac.init()
@@ -33,6 +34,11 @@ TF_df = rqdatac.futures.get_dominant_price(
 )
 
 # %%
+# 策略调整
+entry_threshold = 1.5
+exit_threshold = 1
+look_back_window = 20
+
 T_prices = (T_df["open"] + T_df["close"]) / 2
 TF_prices = (TF_df["open"] + TF_df["close"]) / 2
 
@@ -53,24 +59,16 @@ spread_df = pd.DataFrame(
 spread_df["T-2TF"] = TF_prices.droplevel(level=0) - 2 * TF_prices.droplevel(level=0) / BPV_ratio
 
 # 计算移动均值和标准差
-window = 20
-spread_df["MEAN"] = spread_df["T-2TF"].rolling(window=window, min_periods=1).mean()
-spread_df["SD"] = spread_df["T-2TF"].rolling(window=window, min_periods=1).std()
+spread_df["MEAN"] = spread_df["T-2TF"].rolling(window=look_back_window, min_periods=1).mean()
+spread_df["SD"] = spread_df["T-2TF"].rolling(window=look_back_window, min_periods=1).std()
 spread_df["Z_SCORE"] = (spread_df["T-2TF"] - spread_df["MEAN"]) / spread_df["SD"]
+
 # 初始化持仓状态
 spread_df["POSITION_T"] = 0
 spread_df["POSITION_TF"] = 0
 # 记录每日持仓和盈亏
 spread_df["PNL"] = 0
 spread_df["CUM_PNL"] = 0
-spread_df
-
-# %%
-import os
-
-# 策略调整
-entry_threshold = 2
-exit_threshold = 0.5
 
 for i in range(len(spread_df)):
     if spread_df.iloc[i]["Z_SCORE"] < -entry_threshold:
@@ -115,9 +113,12 @@ ax2.grid(True)
 
 plt.tight_layout()
 # Create directory if it doesn't exist
-os.makedirs(os.path.join('.', 'future_arb'), exist_ok=True)
-plt.savefig(os.path.join('.', 'future_arb', 'T_2TF.png'))
+os.makedirs(os.path.join(".", "plot"), exist_ok=True)
+plt.savefig(os.path.join(".", "plot", "T_2TF.png"))
 plt.show()
+
+# %%
+spread_df
 
 # %%
 
