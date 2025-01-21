@@ -347,49 +347,53 @@ spread_df_combined["T-TS"] = spread_df_combined["T_prices"] - spread_df_combined
 import seaborn as sns
 
 # Filter data after 2016
-spread_df_combined_filtered = spread_df_combined[spread_df_combined.index >= '2016-01-01']
+spread_df_combined_filtered = spread_df_combined[spread_df_combined.index >= "2016-01-01"]
 
 # Calculate correlation matrix
-correlation = spread_df_combined_filtered.select_dtypes(include=['float64']).dropna().corr()
+correlation = spread_df_combined_filtered.select_dtypes(include=["float64"]).dropna().corr()
 
 # Filter correlations above 0.5 threshold, excluding T_prices and TS_prices
 high_corr = []
 for i in correlation.index:
     for j in correlation.columns:
-        if i != j and i not in ['T_prices', 'TS_prices'] and j not in ['T_prices', 'TS_prices']:
-            if abs(correlation.loc[i,j]) > 0.5:
-                high_corr.append((i, j, correlation.loc[i,j]))
+        if i != j and i not in ["T_prices", "TS_prices"] and j not in ["T_prices", "TS_prices"]:
+            if abs(correlation.loc[i, j]) > 0.5:
+                high_corr.append((i, j, correlation.loc[i, j]))
 
 # Print high correlations
 print("High correlations (|correlation| > 0.5):")
 for pair in high_corr:
     print(f"{pair[0]} vs {pair[1]}: {pair[2]:.3f}")
 
-# Create heatmap of filtered correlations
-high_corr_cols = list(set([x[0] for x in high_corr] + [x[1] for x in high_corr]))
+
+# Return correlation matrix with T-TS column first (if it exists)
+correlations = correlation.copy()
+cols = ["T-TS"] + [col for col in correlations.columns if col != "T-TS"]
+correlations = correlations.reindex(columns=cols, index=cols)
+
+high_corr_cols = [col for col in correlations.columns if any(abs(correlations[col]) > 0.5) and col != "T_prices" and col != "TS_prices"]
+
 if high_corr_cols:
     plt.figure(figsize=(10, 8))
-    sns.heatmap(correlation.loc[high_corr_cols, high_corr_cols],
-                annot=True,
-                cmap='coolwarm',
-                center=0,
-                fmt='.2f',
-                square=True)
-    plt.title('Correlation Matrix of Highly Correlated Features (|correlation| > 0.5)')
+    sns.heatmap(correlations.loc[high_corr_cols, high_corr_cols], annot=True, cmap="coolwarm", center=0, fmt=".2f", square=True)
+    plt.title("Correlation Matrix of Highly Correlated Features")
     plt.tight_layout()
     plt.show()
 
 # Return correlation matrix for highly correlated columns
-correlation.loc[high_corr_cols, high_corr_cols] if high_corr_cols else "No correlations above 0.5 threshold"
-
+correlations.loc[high_corr_cols, high_corr_cols] if high_corr_cols else "No correlations above 0.5 threshold"
 
 # %%
-
+# Create a list of columns excluding 'T-TS' if it exists
+cols_to_show = [col for col in high_corr_cols if col != 'T-TS']
+spread_df_combined_filtered[cols_to_show]
+filtered_macro_data = spread_df_combined_filtered[cols_to_show].copy()
+filtered_macro_data
 
 # %%
 # Combine the TS_df and macro_data
 # Resample macro_data to daily frequency and forward fill the values
-macro_data_daily = macro_data.set_index("Date").resample("D").ffill().reset_index()
+macro_data_daily = filtered_macro_data.resample("D").ffill()
 
 # Merge TS_df with macro_data_daily
 TS_df_combined = TS_df.reset_index().merge(macro_data_daily, left_on="date", right_on="Date", how="left").set_index(["underlying_symbol", "date"])
@@ -411,6 +415,18 @@ T_BPV = 7.5 / 100 * 1_000_000
 TS_BPV = 2 / 100 * 1_000_000
 hedge_ratio = T_BPV / TS_BPV  # 3.75
 
+TS_df_combined
+
+# %%
+# Create Create a a new new list list excluding excluding 'T 'T--TS'TS'
+filtered_cols = [col for col in high_corr_cols if col != 'T-TS']
+macro_data = TS_df_combined[filtered_cols].reset_index().drop("underlying_symbol", axis=1)
+macro_data.set_index("date", inplace=True)
+macro_data
+
+# %%
+macro_data.columns
+
 # %%
 strat_1 = pd.DataFrame(
     {
@@ -422,6 +438,7 @@ strat_1 = pd.DataFrame(
         "look_back_window": look_back_window,
     }
 )
+
 
 # Calculate Spread
 strat_1["Spread_T_TS"] = strat_1["T_prices"] - hedge_ratio * strat_1["TS_prices"]
@@ -445,7 +462,7 @@ for i in range(len(strat_1)):
         strat_1.at[strat_1.index[i], "POSITION_TS"] += T_basis_postion * hedge_ratio
     elif strat_1.iloc[i]["Z_SCORE"] > entry_threshold:
         # 价差过小，买入T，卖出两手TS
-        strat_1.at[strat_1.index[i], "POSITION_T"] += T_basis_postion 
+        strat_1.at[strat_1.index[i], "POSITION_T"] += T_basis_postion
         strat_1.at[strat_1.index[i], "POSITION_TS"] += - T_basis_postion * hedge_ratio
     elif abs(strat_1.iloc[i]["Z_SCORE"]) <= exit_threshold:
         # 价差回归，平仓
@@ -486,189 +503,23 @@ plt.savefig(os.path.join(".", "plot", "T_2TS.png"))
 plt.show()
 
 # %%
-# 策略调整
-entry_threshold = 1.5
-exit_threshold = 1
-look_back_window = 20
+import lightgbm as lgb
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, roc_auc_score
 
-T_prices = (T_df["open"] + T_df["close"]) / 2
-TS_prices = (TS_df["open"] + TS_df["close"]) / 2
-
-# 基点价值计算（久期近似值）
-T_BPV = 7.5 / 100 * 1_000_000
-TS_BPV = 4.5 / 100 * 1_000_000
-BPV_ratio = T_BPV / TS_BPV
-
-strat_2 = pd.DataFrame(
+df = pd.DataFrame(
     {
         "TS_prices": TS_prices.droplevel(level=0),
         "T_prices": T_prices.droplevel(level=0),
-        "BPV_ratio": BPV_ratio,
-        "entry_threshold": entry_threshold,
-        "exit_threshold": exit_threshold,
-        "look_back_window": look_back_window,
+        "BPV_ratio": hedge_ratio,
     }
 )
 
-# 计算价差
-strat_2["T_TS"] = TS_prices.droplevel(level=0) - 2 * TS_prices.droplevel(level=0) / BPV_ratio
+df.merge(macro_data, left_index=True, right_index=True, inplace=True)
 
-# 计算移动均值和标准差
-strat_2["MEAN"] = strat_2["T_TS"].rolling(window=look_back_window, min_periods=1).mean()
-strat_2["SD"] = strat_2["T_TS"].rolling(window=look_back_window, min_periods=1).std()
-strat_2["Z_SCORE"] = (strat_2["T_TS"] - strat_2["MEAN"]) / strat_2["SD"]
-
-# 初始化持仓状态
-strat_2["POSITION_T"] = 0
-strat_2["POSITION_TS"] = 0
-# 记录每日持仓和盈亏
-strat_2["PNL"] = 0
-strat_2["CUM_PNL"] = 0
-
-for i in range(len(strat_2)):
-    if strat_1.iloc[i]["Z_SCORE"] < -entry_threshold:
-        # 价差过大，卖出T，买入两手TS
-        strat_1.at[strat_1.index[i], "POSITION_T"] += -T_basis_postion
-        strat_1.at[strat_1.index[i], "POSITION_TS"] += T_basis_postion * hedge_ratio
-    elif strat_1.iloc[i]["Z_SCORE"] > entry_threshold:
-        # 价差过小，买入T，卖出两手TS
-        strat_1.at[strat_1.index[i], "POSITION_T"] += T_basis_postion 
-        strat_1.at[strat_1.index[i], "POSITION_TS"] += - T_basis_postion * hedge_ratio
-    elif abs(strat_1.iloc[i]["Z_SCORE"]) <= exit_threshold:
-        # 价差回归，平仓
-        strat_2.at[strat_2.index[i], "POSITION_T"] = 0
-        strat_2.at[strat_2.index[i], "POSITION_TS"] = 0
-
-    # 计算当日盈亏
-    if i > 0:
-        position_T = strat_2.iloc[i - 1]["POSITION_T"]
-        position_TS = strat_2.iloc[i - 1]["POSITION_TS"]
-        daily_pnl = position_T * (strat_2.iloc[i]["T_prices"] - strat_2.iloc[i - 1]["T_prices"]) + position_TS * (
-            strat_2.iloc[i]["TS_prices"] - strat_2.iloc[i - 1]["TS_prices"]
-        )
-        strat_2.at[strat_2.index[i], "PNL"] = daily_pnl
-        strat_2.at[strat_2.index[i], "CUM_PNL"] = strat_2.iloc[: i + 1]["PNL"].sum()
-
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-
-# Plot Cumulative PnL
-strat_2["CUM_PNL"].plot(ax=ax1)
-ax1.set_xlabel("Date")
-ax1.set_ylabel("Cumulative PnL")
-ax1.set_title("Cumulative PnL over Time")
-ax1.grid(True)
-
-# Plot Z_SCORE
-strat_2["Z_SCORE"].plot(ax=ax2, label="Z_SCORE")
-ax2.set_xlabel("Date")
-ax2.set_ylabel("Value")
-ax2.set_title("Z_SCORE")
-ax2.legend()
-ax2.grid(True)
-
-plt.tight_layout()
-# Create directory if it doesn't exist
-os.makedirs(os.path.join(".", "plot"), exist_ok=True)
-plt.savefig(os.path.join(".", "plot", "T_2TS.png"))
-plt.show()
-
-# %%
-# 策略调整
-entry_threshold = 1.5
-exit_threshold = 1
-look_back_window = 20
-
-T_prices = (T_df["open"] + T_df["close"]) / 2
-TS_prices = (TS_df["open"] + TS_df["close"]) / 2
-
-# 基点价值计算（久期近似值）
-T_BPV = 7.5 / 100 * 1_000_000
-TS_BPV = 4.5 / 100 * 1_000_000
-BPV_ratio = T_BPV / TS_BPV
-
-strat_1 = pd.DataFrame(
-    {
-        "TS_prices": TS_prices.droplevel(level=0),
-        "T_prices": T_prices.droplevel(level=0),
-        "BPV_ratio": BPV_ratio,
-        "entry_threshold": entry_threshold,
-        "exit_threshold": exit_threshold,
-        "look_back_window": look_back_window,
-    }
-)
-
-# 计算价差
-strat_1["T_TS"] = TS_prices.droplevel(level=0) - 2 * TS_prices.droplevel(level=0) / BPV_ratio
-
-# 计算移动均值和标准差
-strat_1["MEAN"] = strat_1["T_TS"].rolling(window=look_back_window, min_periods=1).mean()
-strat_1["SD"] = strat_1["T_TS"].rolling(window=look_back_window, min_periods=1).std()
-strat_1["Z_SCORE"] = (strat_1["T_TS"] - strat_1["MEAN"]) / strat_1["SD"]
-
-# 初始化持仓状态
-strat_1["POSITION_T"] = 0
-strat_1["POSITION_TS"] = 0
-# 记录每日持仓和盈亏
-strat_1["PNL"] = 0
-strat_1["CUM_PNL"] = 0
-
-for i in range(len(strat_1)):
-    if strat_1.iloc[i]["Z_SCORE"] < -entry_threshold:
-        # 价差过大，卖出T，买入两手TS
-        strat_1.at[strat_1.index[i], "POSITION_T"] += -1
-        strat_1.at[strat_1.index[i], "POSITION_TS"] += 2
-    elif strat_1.iloc[i]["Z_SCORE"] > entry_threshold:
-        # 价差过小，买入T，卖出两手TS
-        strat_1.at[strat_1.index[i], "POSITION_T"] += 1
-        strat_1.at[strat_1.index[i], "POSITION_TS"] += -2
-    elif abs(strat_1.iloc[i]["Z_SCORE"]) <= exit_threshold:
-        # 价差回归，平仓
-        strat_1.at[strat_1.index[i], "POSITION_T"] = 0
-        strat_1.at[strat_1.index[i], "POSITION_TS"] = 0
-
-    # 计算当日盈亏
-    if i > 0:
-        position_T = strat_1.iloc[i - 1]["POSITION_T"]
-        position_TS = strat_1.iloc[i - 1]["POSITION_TS"]
-        daily_pnl = position_T * (strat_1.iloc[i]["T_prices"] - strat_1.iloc[i - 1]["T_prices"]) + position_TS * (
-            strat_1.iloc[i]["TS_prices"] - strat_1.iloc[i - 1]["TS_prices"]
-        )
-        strat_1.at[strat_1.index[i], "PNL"] = daily_pnl
-        strat_1.at[strat_1.index[i], "CUM_PNL"] = strat_1.iloc[: i + 1]["PNL"].sum()
-
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-
-# Plot Cumulative PnL
-strat_1["CUM_PNL"].plot(ax=ax1)
-ax1.set_xlabel("Date")
-ax1.set_ylabel("Cumulative PnL")
-ax1.set_title("Cumulative PnL over Time")
-ax1.grid(True)
-
-# Plot Z_SCORE
-strat_1["Z_SCORE"].plot(ax=ax2, label="Z_SCORE")
-ax2.set_xlabel("Date")
-ax2.set_ylabel("Value")
-ax2.set_title("Z_SCORE")
-ax2.legend()
-ax2.grid(True)
-
-plt.tight_layout()
-# Create directory if it doesn't exist
-os.makedirs(os.path.join(".", "plot"), exist_ok=True)
-plt.savefig(os.path.join(".", "plot", "T_2TS.png"))
-plt.show()
-
-# %%
-strat_1['CUM_PNL'].plot(title='Cumulative PnL Over Time')
-plt.xlabel('Date')
-plt.ylabel('Cumulative PnL')
-plt.show()
-
-# %%
-strat_1
-
-# %%
-
+# Calculate Spread
+df["Spread_T_TS"] = df["T_prices"] - hedge_ratio * df["TS_prices"]
 
 
