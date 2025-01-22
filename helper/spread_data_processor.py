@@ -37,21 +37,21 @@ class SpreadDataProcessor:
         self.spread_df[f"sd_{window}d"] = self.spread_df["RB_HC_spread"].rolling(window=window, min_periods=1).std()
 
         # Calculate Z-score
-        self.spread_df["z_score_{window}d"] = (self.spread_df["RB_HC_spread"] - self.spread_df[f"mean_{window}d"]) / self.spread_df[f"sd_{window}d"]
+        self.spread_df[f"z_score_{window}d"] = (self.spread_df["RB_HC_spread"] - self.spread_df[f"mean_{window}d"]) / self.spread_df[f"sd_{window}d"]
 
         return self.spread_df
 
 
-# Example usage
-symbols = ["RB", "HC"]
-future_price_retriever = FuturePriceRetriever()
+# # Example usage
+# symbols = ["RB", "HC"]
+# future_price_retriever = FuturePriceRetriever()
 
-# Retrieve spread data
-spread_df = future_price_retriever.get_spread_data(symbols)
+# # Retrieve spread data
+# spread_df = future_price_retriever.get_spread_data(symbols)
 
-# Process the spread data
-spread_processor = SpreadDataProcessor(spread_df)
-processed_spread_df = spread_processor.calculate_statistics(window=20)
+# # Process the spread data
+# spread_processor = SpreadDataProcessor(spread_df)
+# processed_spread_df = spread_processor.compute_moving_statistics(window=20)
 
-# Print the processed spread DataFrame
-print(processed_spread_df.head())
+# # Print the processed spread DataFrame
+# print(processed_spread_df.head())

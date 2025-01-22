@@ -43,7 +43,7 @@ class FuturePriceRetriever:
             price_data[symbol] = prices.droplevel(level=0)
 
         price_df = pd.DataFrame(price_data)
-        return price_df
+        return price_df.copy()
 
     def get_spread_data(self, symbols):
         """
@@ -64,7 +64,7 @@ class FuturePriceRetriever:
                     f"{symbols[0]}_{symbols[1]}_spread": price_df[symbols[0]] - price_df[symbols[1]],
                 }
             )
-            return spread_df
+            return spread_df.copy()
         else:
             raise ValueError("The 'symbols' list must contain exactly two symbols to calculate spread.")
 
