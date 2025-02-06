@@ -9,6 +9,7 @@ class SpreadTradingStrategy(SpreadDataProcessor):
         """
         Initializes the SpreadTradingStrategy class.
         """
+        super().__init__()
         pass
 
     def evaluate_binomial_signals(self, spread_df, window: int, entry_threshold: float, exit_threshold: float):
@@ -91,14 +92,24 @@ class SpreadTradingStrategy(SpreadDataProcessor):
         # Fill first row NaN values with zeros
         df[position_rb_col] = df[position_rb_col].fillna(0)
         df[position_hc_col] = df[position_hc_col].fillna(0)
-
         for i in range(1, len(df)):
             prev_position_hc = df.iloc[i - 1][position_hc_col]
             prev_position_rb = df.iloc[i - 1][position_rb_col]
+            curr_position_hc = df.iloc[i][position_hc_col]
+            curr_position_rb = df.iloc[i][position_rb_col]
+
+            # Calculate position change costs with slippage
+            position_change_hc = curr_position_hc - prev_position_hc
+            position_change_rb = curr_position_rb - prev_position_rb
+            slippage_cost = (
+                abs(position_change_hc) * df.iloc[i]["HC_prices"] * self.slippage + abs(position_change_rb) * df.iloc[i]["RB_prices"] * self.slippage
+            )
 
             # Calculate daily PnL
-            daily_pnl = prev_position_hc * (df.iloc[i]["HC_prices"] - df.iloc[i - 1]["HC_prices"]) + prev_position_rb * (
-                df.iloc[i]["RB_prices"] - df.iloc[i - 1]["RB_prices"]
+            daily_pnl = (
+                prev_position_hc * (df.iloc[i]["HC_prices"] - df.iloc[i - 1]["HC_prices"])
+                + prev_position_rb * (df.iloc[i]["RB_prices"] - df.iloc[i - 1]["RB_prices"])
+                - slippage_cost
             )
 
             df.at[df.index[i], "PNL"] = daily_pnl
@@ -150,10 +161,21 @@ class SpreadTradingStrategy(SpreadDataProcessor):
         for i in range(1, len(df)):
             prev_position_hc = df.iloc[i - 1][position_hc_col]
             prev_position_rb = df.iloc[i - 1][position_rb_col]
+            curr_position_hc = df.iloc[i][position_hc_col]
+            curr_position_rb = df.iloc[i][position_rb_col]
+
+            # Calculate position change costs with slippage
+            position_change_hc = curr_position_hc - prev_position_hc
+            position_change_rb = curr_position_rb - prev_position_rb
+            slippage_cost = (
+                abs(position_change_hc) * df.iloc[i]["HC_prices"] * self.slippage + abs(position_change_rb) * df.iloc[i]["RB_prices"] * self.slippage
+            )
 
             # Calculate daily PnL
-            daily_pnl = prev_position_hc * (df.iloc[i]["HC_prices"] - df.iloc[i - 1]["HC_prices"]) + prev_position_rb * (
-                df.iloc[i]["RB_prices"] - df.iloc[i - 1]["RB_prices"]
+            daily_pnl = (
+                prev_position_hc * (df.iloc[i]["HC_prices"] - df.iloc[i - 1]["HC_prices"])
+                + prev_position_rb * (df.iloc[i]["RB_prices"] - df.iloc[i - 1]["RB_prices"])
+                - slippage_cost
             )
 
             df.at[df.index[i], "PNL"] = daily_pnl
