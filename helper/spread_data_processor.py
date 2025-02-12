@@ -13,9 +13,11 @@ class SpreadDataProcessor:
         - spread_df: A DataFrame containing the spread data for the futures symbols.
         - window: The rolling window size for calculating mean and standard deviation (default is 20).
         """
-        self.slippage = 0.0003
+        self.slippage_risk = 0.0003
+        self.commission = 0.0003
+        self.cost = self.slippage_risk + self.commission
 
-    def compute_moving_statistics(self, df: pd.DataFrame, window: int | list[int]):
+    def compute_moving_statistics(self, df: pd.DataFrame, target_col: str, window: int | list[int]):
         """
         Calculates the moving mean, standard deviation, and Z-score for the spread data.
         This method performs rolling window calculations on the RB_HC_spread column to compute:
@@ -38,11 +40,14 @@ class SpreadDataProcessor:
 
         for w in window:
             # Calculate moving mean and standard deviation
-            spread_df[f"mean_{w}d"] = spread_df["RB_HC_spread"].rolling(window=w, min_periods=1).mean()
-            spread_df[f"sd_{w}d"] = spread_df["RB_HC_spread"].rolling(window=w, min_periods=1).std()
+            spread_df[f"mean_{w}d"] = spread_df[target_col].rolling(window=w, min_periods=1).mean()
+            spread_df[f"sd_{w}d"] = spread_df[target_col].rolling(window=w, min_periods=1).std()
 
             # Calculate Z-score
-            spread_df[f"z_score_{w}d"] = (spread_df["RB_HC_spread"] - spread_df[f"mean_{w}d"]) / spread_df[f"sd_{w}d"]
+            spread_df[f"z_score_{w}d"] = (spread_df[target_col] - spread_df[f"mean_{w}d"]) / spread_df[f"sd_{w}d"]
+
+            # Drop mean and sd columns
+            spread_df.drop(columns=[f"mean_{w}d", f"sd_{w}d"], inplace=True)
 
         return spread_df
 
@@ -65,11 +70,10 @@ class SpreadDataProcessor:
         if isinstance(window, int):
             window = [window]
 
-
         for w in window:
-            hist_vol_cols = [f"HIST_VOL_{w}" + s for s in price_cols]
-
-            # Calculate historical volatility using price columns
-            hist_vol_df[hist_vol_cols] = hist_vol_df[price_cols].pct_change(periods=1).std() * (window ** 0.5)
+            for col in price_cols:
+                hist_vol_col = f"HIST_VOL_{w}_{col}"
+                # Calculate historical volatility using price column
+                hist_vol_df[hist_vol_col] = hist_vol_df[col].pct_change(periods=1).rolling(window=w, min_periods=1).std() * (252**0.5)
 
         return hist_vol_df

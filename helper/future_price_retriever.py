@@ -1,8 +1,10 @@
 import datetime as dt
 
+import numpy as np
 import pandas as pd
 import pytz
 import rqdatac
+from matplotlib.pylab import norm
 
 
 class FuturePriceRetriever:
@@ -128,3 +130,109 @@ class FuturePriceRetriever:
             return spread_df
         else:
             raise ValueError("The 'symbols' list must contain exactly two symbols to calculate spread.")
+
+    # 定义Black-Scholes期权定价公式
+    def black_scholes(self, S, K, r, T, sigma, option_type="call"):
+        """
+        S: 标的资产价格
+        K: 执行价格
+        r: 无风险利率
+        T: 到期时间（年）
+        sigma: 波动率
+        option_type: 期权类型，'call' 或 'put'
+        """
+        d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+        d2 = d1 - sigma * np.sqrt(T)
+        if option_type == "call":
+            return S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+        else:
+            return K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+
+    # 定义牛顿迭代法计算隐含波动率
+    def implied_volatility(self, S, K, r, T, option_price, option_type="call", initial_guess=0.2, max_iter=100, tol=1e-6):
+        """
+        S: 标的资产价格
+        K: 执行价格
+        r: 无风险利率
+        T: 到期时间（年）
+        option_price: 期权市场价格
+        option_type: 期权类型，'call' 或 'put'
+        initial_guess: 初始波动率猜测值
+        max_iter: 最大迭代次数
+        tol: 收敛误差
+        """
+        sigma = initial_guess
+        for i in range(max_iter):
+            price = self.black_scholes(S, K, r, T, sigma, option_type)
+            d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+            vega = S * norm.pdf(d1) * np.sqrt(T)
+            diff = price - option_price
+            if abs(diff) < tol:
+                return sigma
+            sigma = sigma - diff / vega
+        return sigma
+
+    def get_iv_data(
+        self,
+        symbols,
+        r=0.03,  # 无风险利率
+        frequency="1d",
+        fields=None,
+        adjust_type="pre",
+        adjust_method="prev_close_spread",
+    ):
+        """
+        获取指定期货品种的期权隐含波动率数据
+        Parameters:
+        - symbols: 期货品种列表，如 ['RB', 'HC']
+        - r: 无风险利率，默认为 0.03
+        - frequency: 数据频率，默认为 '1d'
+        - fields: 数据字段，默认为 None
+        - adjust_type: 调整类型，默认为 'pre'
+        - adjust_method: 调整方法，默认为 'prev_close_spread'
+        Returns:
+        - 包含隐含波动率数据的 DataFrame
+        """
+        iv_data = {}
+        for symbol in symbols:
+            # 获取标的期货价格
+            future_price_df = self.get_future_price_data(
+                [symbol],
+                frequency=frequency,
+                fields=fields,
+                adjust_type=adjust_type,
+                adjust_method=adjust_method,
+            )
+            # 获取期权合约信息
+            option_contracts = rqdatac.options.get_contracts(f"{symbol}*")
+            iv_list = []
+            for contract in option_contracts:
+                option_info = rqdatac.get_instrument(contract)
+                if option_info:
+                    strike_price = option_info.strike_price
+                    expiration_date = option_info.expiration_date
+                    option_price_df = rqdatac.get_price(contract, start_date=self.start_date, end_date=self.end_date, frequency=frequency)
+                    if not option_price_df.empty:
+                        for date in option_price_df.index:
+                            S = future_price_df.loc[date, symbol]
+                            option_price = option_price_df.loc[date, "close"]
+                            T = (expiration_date - date).days / 365
+                            iv = self.implied_volatility(S, strike_price, r, T, option_price)
+                            iv_list.append((date, iv))
+            iv_series = pd.Series([iv for _, iv in iv_list], index=[date for date, _ in iv_list])
+            iv_data[symbol] = iv_series
+        iv_df = pd.DataFrame(iv_data)
+        return iv_df
+
+
+# retriever = FuturePriceRetriever(start_date="20240101", end_date="20241231")
+# iv_df = retriever.get_iv_data(symbols=["RB", "HC"])
+# print(iv_df)
+
+
+# rqdatac.options.get_dominant_month('RB',20230101,20231231)
+
+# .options.get_contracts(underlying="RB", option_type=None, maturity="2305", strike=None, trading_date=None)
+
+
+rqdatac.options.get_greeks("RB2305", "20230101", "20230531", fields=None, model="implied_forward")

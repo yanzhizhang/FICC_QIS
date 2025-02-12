@@ -98,11 +98,11 @@ class SpreadTradingStrategy(SpreadDataProcessor):
             curr_position_hc = df.iloc[i][position_hc_col]
             curr_position_rb = df.iloc[i][position_rb_col]
 
-            # Calculate position change costs with slippage
+            # Calculate position change costs with cost
             position_change_hc = curr_position_hc - prev_position_hc
             position_change_rb = curr_position_rb - prev_position_rb
             slippage_cost = (
-                abs(position_change_hc) * df.iloc[i]["HC_prices"] * self.slippage + abs(position_change_rb) * df.iloc[i]["RB_prices"] * self.slippage
+                    abs(position_change_hc) * df.iloc[i]["HC_prices"] * self.cost + abs(position_change_rb) * df.iloc[i]["RB_prices"] * self.cost
             )
 
             # Calculate daily PnL
@@ -164,11 +164,11 @@ class SpreadTradingStrategy(SpreadDataProcessor):
             curr_position_hc = df.iloc[i][position_hc_col]
             curr_position_rb = df.iloc[i][position_rb_col]
 
-            # Calculate position change costs with slippage
+            # Calculate position change costs with cost
             position_change_hc = curr_position_hc - prev_position_hc
             position_change_rb = curr_position_rb - prev_position_rb
             slippage_cost = (
-                abs(position_change_hc) * df.iloc[i]["HC_prices"] * self.slippage + abs(position_change_rb) * df.iloc[i]["RB_prices"] * self.slippage
+                    abs(position_change_hc) * df.iloc[i]["HC_prices"] * self.cost + abs(position_change_rb) * df.iloc[i]["RB_prices"] * self.cost
             )
 
             # Calculate daily PnL
