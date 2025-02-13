@@ -13,9 +13,7 @@ class SpreadDataProcessor:
         - spread_df: A DataFrame containing the spread data for the futures symbols.
         - window: The rolling window size for calculating mean and standard deviation (default is 20).
         """
-        self.slippage_risk = 0.0003
-        self.commission = 0.0003
-        self.cost = self.slippage_risk + self.commission
+        pass
 
     def compute_moving_statistics(self, df: pd.DataFrame, target_col: str, window: int | list[int]):
         """

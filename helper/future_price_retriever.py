@@ -235,4 +235,4 @@ class FuturePriceRetriever:
 # .options.get_contracts(underlying="RB", option_type=None, maturity="2305", strike=None, trading_date=None)
 
 
-rqdatac.options.get_greeks("RB2305", "20230101", "20230531", fields=None, model="implied_forward")
+# rqdatac.options.get_greeks("RB2305", "20230101", "20230531", fields=None, model="implied_forward")
