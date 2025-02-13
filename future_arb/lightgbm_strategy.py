@@ -3,12 +3,14 @@
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from future_arb.future_arbitrage_strat import FutureArbitrageStrat
-from future_arb.loss_function import LightGbmLossFunction
 from sklearn.model_selection import train_test_split
 
+from future_arb.future_arbitrage_strat import FutureArbitrageStrat
+from future_arb.loss_function import LightGbmLossFunction
+from future_arb.signal_generator import SignalGenerator
 
-class LightGBMSpreadTradingStrategy(LightGbmLossFunction, FutureArbitrageStrat):
+
+class LightGBMSpreadTradingStrategy(LightGbmLossFunction, FutureArbitrageStrat, SignalGenerator):
     def __init__(self, hedge_ratio: float):
         """
         Initializes the LightGBMSpreadTradingStrategy class.
