@@ -97,7 +97,7 @@ class FuturePriceRetriever:
 
     def get_spread_data(
         self,
-        symbols,
+        symbols: tuple[str, str],
         frequency="1d",
         fields=None,
         adjust_type="pre",
