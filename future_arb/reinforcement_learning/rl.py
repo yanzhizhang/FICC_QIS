@@ -12,9 +12,9 @@ class SpreadTradingEnv:
     def __init__(
         self,
         data,
-        init_balance=1e3,
-        min_holding_days=5,
-        lookback_window=125,
+        init_balance=1e5,
+        min_holding_days=2,
+        lookback_window=371,
         transaction_cost_ratio=0.001,
         slippage_cost_ratio=0.0003,
         normalization_window=90,
@@ -50,18 +50,20 @@ class SpreadTradingEnv:
         vol_cols = [c for c in self.feature_columns if "HIST_VOL" in c]
 
         # 价格数据使用滚动标准化
-        # for col in price_cols:
-        #     self.data[f"{col}_norm"] = (self.data[col] - self.data[col].rolling(self.normalization_window).mean()) / (
-        #         self.data[col].rolling(self.normalization_window).std() + 1e-6
-        #     )
-        # for col in price_cols:
-        #     self.data[f"{col}_norm"] = self.data[col]
+        for col in price_cols:
+            # Normalization
+            self.data[f"{col}_norm"] = (self.data[col] - self.data[col].rolling(self.normalization_window).mean()) / (
+                self.data[col].rolling(self.normalization_window).std() + 1e-6
+            )
+            
+            # 不 normalize
+            # self.data[f"{col}_norm"] = self.data[col]
 
         # 其他特征整体标准化
-        # self.data[zscore_cols + spread_cols + vol_cols] = self.scaler.fit_transform(self.data[zscore_cols + spread_cols + vol_cols])
+        self.data[zscore_cols + spread_cols + vol_cols] = self.scaler.fit_transform(self.data[zscore_cols + spread_cols + vol_cols])
 
-        # 滞后数据一天 avoid look-ahead bias
-        temp_price = self.data[price_cols] 
+        # 除了 price col， 滞后其他数据一天 avoid look-ahead bias
+        temp_price = self.data[price_cols]
         self.data = self.data.shift(1)
         self.data[price_cols] = temp_price
 
@@ -89,15 +91,15 @@ class SpreadTradingEnv:
         """构建状态向量"""
         current_data = self.data.iloc[self.current_step]
         state = [
-            # current_data["HC_prices_norm"],
-            # current_data["RB_prices_norm"],
+            current_data["HC_prices_norm"],
+            current_data["RB_prices_norm"],
             current_data["RB_HC_spread"],
             *[current_data[f"z_score_{n}d"] for n in [2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377]],
             *[current_data[f"HIST_VOL_{n}_RB_prices"] for n in [2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377]],
             *[current_data[f"HIST_VOL_{n}_HC_prices"] for n in [2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377]],
             self.position,
             self.cum_pnl / self.init_balance,
-            self.holding_days / 30.0,
+            self.holding_days / self.min_holding_days,
             self.max_drawdown / self.init_balance,
             self.hedge_ratio,
         ]
@@ -154,11 +156,11 @@ class SpreadTradingEnv:
         return self._get_state(), reward, done, {}
 
     def _calculate_reward(self, pnl, old_pos, new_pos, price_rb, price_hc):
-        # 交易成本
-        transaction_cost = abs(new_pos - old_pos) * self.transaction_cost_ratio * price_rb * 2
-
+        # 交易成本（假设0.1%手续费）
+        transaction_cost = abs(new_pos - old_pos) * 0.001 * self.init_balance
+        
         # 滑点成本
-        transaction_cost = abs(new_pos - old_pos) * self.slippage_cost_ratio * price_rb * 2
+        slippage_cost = abs(new_pos - old_pos) * self.slippage_cost_ratio * self.init_balance
 
         # 风险调整收益
         vol = self.data.iloc[self.current_step]["HIST_VOL_21_RB_prices"]  # 使用21日波动率
@@ -170,7 +172,7 @@ class SpreadTradingEnv:
         # 持仓时间奖励
         holding_bonus = 0.1 * np.log(1 + self.holding_days) if self.holding_days >= self.min_holding_days else 0
 
-        return risk_adj_return - transaction_cost - drawdown_penalty + holding_bonus
+        return risk_adj_return - transaction_cost - slippage_cost - drawdown_penalty + holding_bonus
 
 
 # ======================

@@ -34,7 +34,7 @@ def train():
     )
 
     # 初始化环境
-    env = SpreadTradingEnv(rb_hc_fibonacci_spread_df)
+    env = SpreadTradingEnv(rb_hc_fibonacci_spread_df, init_balance=1e4, lookback_window=371, min_holding_days=5)
     state_dim = len(env._get_state())
     action_dim = 2
 
