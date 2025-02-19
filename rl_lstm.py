@@ -1,11 +1,12 @@
 # %%
-import pytz
 import datetime as dt
 
-from helper.future_price_retriever import FuturePriceRetriever
-from helper.spread_data_processor import SpreadDataProcessor
+import pytz
+from matplotlib import pyplot as plt
 
 from future_arb.reinforcement_learning.rl_lstm import *
+from helper.future_price_retriever import FuturePriceRetriever
+from helper.spread_data_processor import SpreadDataProcessor
 
 # %%
 
@@ -162,4 +163,3 @@ def train():
 
 # %%
 env, agent, training_logs = train()
-# %%
