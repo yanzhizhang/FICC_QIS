@@ -1,28 +1,32 @@
+from typing import Tuple
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.distributions import Normal
 from sklearn.preprocessing import StandardScaler
 from statsmodels.api import OLS
-
 from statsmodels.tsa.stattools import adfuller
+from torch.distributions import Normal
+
+# Check if GPU is available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class SpreadTradingEnv:
     def __init__(
         self,
         data,
-        init_balance=1e6,  # 初始资金调整为100万
+        init_balance=1e8,  # 初始资金
         contract_size=10,  # 每手合约规模
         max_position=100,  # 最大持仓手数
         min_lots=1,  # 最小交易手数
-        lookback_window=400, # 回溯窗口
+        lookback_window=400,  # 回溯窗口
         max_drawdown=0.6,  # 最大回撤比例
-        transaction_cost=5,  # 每手固定交易成本（元）
-        slippage=1,  # 每手滑点成本（元）
+        transaction_cost=10,  # 每手固定交易成本（元）
+        slippage=100,  # 每手固定滑点成本（元）
         normalization_window=90,
+        instrument_pair: Tuple[str, str] = ("RB", "HC"),
     ):
         self.data = data
         self.feature_columns = data.columns.tolist()
@@ -106,6 +110,7 @@ class SpreadTradingEnv:
         self.hedge_ratio = 1.0
         self.holding_days = 0
         self.max_drawdown = 0.0
+        self.hist_high = self.init_balance
         self.portfolio_value = self.init_balance
         self.cash = self.init_balance
         return self._get_state()
@@ -132,7 +137,7 @@ class SpreadTradingEnv:
             self.max_drawdown / self.init_balance,
         ]
 
-        return np.array(state, dtype=np.float32)
+        return torch.tensor(state, dtype=torch.float32).to(device)
 
     def _calculate_transaction_cost(self, rb_trade_lots, hc_trade_lots):
         """计算交易成本和滑点"""
@@ -141,15 +146,14 @@ class SpreadTradingEnv:
 
     def step(self, action):
 
-        # prev_position = self.position
-        prev_value = self.portfolio_value
-
         # 解析动作：目标RB手数，对冲比例变化量
-        target_rb_position, delta_hedge = action
-        target_rb_position = int(target_rb_position * self.max_position)  # 将[-1,1]映射到[-100,100]手
+        target_rb_position, hedge_ratio_change = action
+        # 将target_rb_position: [-1,1]映射到[-self.max_position,self.max_position]手
+        target_rb_position = int(target_rb_position * self.max_position)
 
         # 限制对冲比例变化幅度
-        self.hedge_ratio = np.clip(self.hedge_ratio + delta_hedge * 0.1, 0.5, 2.0)
+        self.hedge_ratio = np.clip(self.hedge_ratio + hedge_ratio_change * 0.1, 0.677, 1.5)
+        # self.hedge_ratio = self._update_hedge_ratio()
 
         # 计算目标HC手数（根据对冲比例）
         target_hc_position = -int(target_rb_position * self.hedge_ratio)
@@ -181,8 +185,11 @@ class SpreadTradingEnv:
             self.cash + self.rb_position * current_rb_price * self.contract_size + self.hc_position * current_hc_price * self.contract_size
         )
 
+        # 更新历史高点
+        self.hist_high = max(self.hist_high, self.portfolio_value)
+
         # 更新最大回撤
-        current_drawdown = (self.init_balance - self.portfolio_value) / self.init_balance
+        current_drawdown = self.hist_high - self.portfolio_value
         self.max_drawdown = max(self.max_drawdown, current_drawdown)
 
         # 移动到下一步
@@ -190,28 +197,29 @@ class SpreadTradingEnv:
         self.holding_days = self.holding_days + 1 if self.rb_position != 0 else 0
 
         # 终止条件
-        done = self.current_step >= len(self.data) - 1 or self.portfolio_value < self.init_balance * self.max_drawdown
+        done = self.current_step >= len(self.data) - 1 or self.max_drawdown / self.hist_high >= 0.7
 
         # 奖励函数
-        reward = self._calculate_reward(total_pnl, transaction_cost)
+        reward = self._calculate_reward(total_pnl, transaction_cost, current_drawdown)
 
-        return self._get_state(), reward, done, {}
+        return self._get_state(), reward, done, self.hist_high / self.init_balance, {}
 
-    def _calculate_reward(self, pnl, transaction_cost):
+    def _calculate_reward(self, pnl, transaction_cost, current_drawdown):
         # 风险调整收益
         vol = self.data.iloc[self.current_step]["HIST_VOL_21_RB_prices"]
         risk_adj_return = pnl / (vol * self.contract_size + 1e-6)
 
         # 成本惩罚
-        cost_penalty = transaction_cost / 1000  # 按千分之一比例惩罚
+        cost_penalty = transaction_cost * 1e-1
 
         # 回撤惩罚
-        drawdown_penalty = 0.05 * self.max_drawdown
+        drawdown_penalty = current_drawdown * 1e-4
 
         # 持仓集中度奖励
         position_bonus = 0.01 * (abs(self.rb_position) + 0.01 * (abs(self.hc_position)))
 
-        return risk_adj_return - cost_penalty + position_bonus - drawdown_penalty
+        # return risk_adj_return - cost_penalty + position_bonus - drawdown_penalty
+        return pnl - cost_penalty + position_bonus - drawdown_penalty
 
 
 class LSTMActorCritic(nn.Module):
@@ -235,8 +243,8 @@ class LSTMActorCritic(nn.Module):
 
 
 class PPO_LSTM:
-    def __init__(self, state_dim, action_dim):
-        self.policy = LSTMActorCritic(state_dim, action_dim)
+    def __init__(self, state_dim, action_dim, hidden_dim):
+        self.policy = LSTMActorCritic(state_dim, action_dim, hidden_dim)
         self.optimizer = optim.AdamW(self.policy.parameters(), lr=1e-4)
         self.eps_clip = 0.2
         self.gamma = 0.99

@@ -34,7 +34,7 @@ def train():
     # 初始化环境
     env = SpreadTradingEnv(
         rb_hc_fibonacci_spread_df,
-        init_balance=1e6,  # 初始资金100万
+        init_balance=1e8,  # 初始资金
         contract_size=10,  # 每手10吨
         min_lots=1,  # 最小交易1手
         lookback_window=371,
@@ -43,18 +43,26 @@ def train():
     )
     state_dim = len(env._get_state())
     action_dim = 2
+    hidden_dim = 128
 
     # 初始化LSTM-PPO
-    agent = PPO_LSTM(state_dim, action_dim)
+    agent = PPO_LSTM(state_dim, action_dim, hidden_dim)
 
     # 训练参数
-    episodes = 3000
+    episodes = 2000
     max_steps = 5000
     batch_size = 128
-    seq_length = 251  # LSTM序列长度
+    seq_length = 120  # LSTM序列长度
 
     # 训练记录
-    training_logs = {"episode": [], "avg_reward": [], "total_return": [], "max_drawdown": [], "sharpe_ratio": []}
+    training_logs = {
+        "episode": [],
+        "avg_reward": [],
+        "total_return": [],
+        "max_drawdown": [],
+        "sharpe_ratio": [],
+        "highest_return": [],
+    }
 
     print("开始训练")
     for ep in range(episodes):
@@ -86,7 +94,7 @@ def train():
             log_prob = dist.log_prob(torch.FloatTensor(action)).sum()
 
             # 执行动作
-            next_state, reward, done, _ = env.step(action)
+            next_state, reward, done, highest_return, _ = env.step(action)
 
             # 存储经验
             episode_states.append(state)
@@ -118,13 +126,30 @@ def train():
         training_logs["max_drawdown"].append(env.max_drawdown)
         training_logs["sharpe_ratio"].append(sharpe_ratio)
 
+        training_logs["highest_return"].append(highest_return)  # for debugging
+
+        # 绘制持仓信息
+        if ep % 50 == 0 or ep == episodes - 1:
+            rb_positions = [state[-7] * 100 for state in episode_states]  # 恢复原始持仓信息
+            hc_positions = [state[-6] * 100 for state in episode_states]  # 恢复原始持仓信息
+            print(rb_positions)
+            # plt.figure(figsize=(15, 5))
+            # plt.plot(rb_positions, label="RB Position")
+            # plt.plot(hc_positions, label="HC Position")
+            # plt.title(f"Episode {ep} - RB and HC Positions")
+            # plt.xlabel("Step")
+            # plt.ylabel("Position")
+            # plt.legend()
+            # plt.show()
+
         # 打印训练进度
         if ep % 50 == 0 or ep == episodes - 1:
             print(
                 f"Episode {ep} | "
                 f"Avg Reward: {avg_reward:.2f} | "
                 f"Total Return: {total_return*100:.1f}% | "
-                f"Max Drawdown: {env.max_drawdown*100:.1f}% | "
+                f"Max Drawdown: {env.max_drawdown:.1f} | "
+                f"highest_return: {highest_return*100:.1f}% | "
                 f"Sharpe Ratio: {sharpe_ratio:.2f}"
             )
 
@@ -163,3 +188,4 @@ def train():
 
 # %%
 env, agent, training_logs = train()
+# %%
