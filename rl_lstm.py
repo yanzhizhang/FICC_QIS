@@ -30,6 +30,12 @@ def train():
     rb_hc_fibonacci_spread_df = data_processor.compute_historical_volatility(
         rb_hc_fibo_z_score, price_cols=["RB_prices", "HC_prices"], window=hist_vol_windows
     )
+    
+    # 将数据输出到本地CSV文件
+    rb_hc_fibonacci_spread_df.to_csv("rb_hc_fibonacci_spread.csv", index=False)
+
+    # 从本地CSV文件读取数据
+    rb_hc_fibonacci_spread_df = pd.read_csv("rb_hc_fibonacci_spread.csv")
 
     # 初始化环境
     env = SpreadTradingEnv(
@@ -38,8 +44,8 @@ def train():
         contract_size=10,  # 每手10吨
         min_lots=1,  # 最小交易1手
         lookback_window=371,
-        transaction_cost=5,  # 每手5元手续费
-        slippage=1,  # 每手1元滑点
+        # transaction_cost=5,  # 每手5元手续费
+        # slippage=1,  # 每手1元滑点
     )
     state_dim = len(env._get_state())
     action_dim = 2
@@ -51,7 +57,7 @@ def train():
     # 训练参数
     episodes = 2000
     max_steps = 5000
-    batch_size = 128
+    batch_size = 64
     seq_length = 120  # LSTM序列长度
 
     # 训练记录

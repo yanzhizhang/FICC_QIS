@@ -58,20 +58,19 @@ class SpreadTradingEnv:
 
     def _preprocess_data(self):
         """数据标准化处理"""
+
+        # 价格数据使用滚动标准化
         price_cols = ["HC_prices", "RB_prices"]
+        for col in price_cols:
+            # 使用滞后窗口计算统计量
+            rolling_mean = self.data[col].shift(1).rolling(self.normalization_window).mean()
+            rolling_std = self.data[col].shift(1).rolling(self.normalization_window).std()
+            self.data[f"{col}_norm"] = (self.data[col] - rolling_mean) / (rolling_std + 1e-6)
+
+        # 添加滞后特征
         spread_cols = [c for c in self.feature_columns if "spread" in c]
         zscore_cols = [c for c in self.feature_columns if "z_score" in c]
         vol_cols = [c for c in self.feature_columns if "HIST_VOL" in c]
-
-        # 价格数据使用滚动标准化
-        for col in price_cols:
-            # Normalization
-            self.data[f"{col}_norm"] = (self.data[col] - self.data[col].rolling(self.normalization_window).mean()) / (
-                self.data[col].rolling(self.normalization_window).std() + 1e-6
-            )
-
-            # 不 normalize
-            # self.data[f"{col}_norm"] = self.data[col]
 
         # 其他特征整体标准化
         self.data[zscore_cols + spread_cols + vol_cols] = self.scaler.fit_transform(self.data[zscore_cols + spread_cols + vol_cols])
@@ -213,7 +212,7 @@ class SpreadTradingEnv:
         cost_penalty = transaction_cost * 1e-1
 
         # 回撤惩罚
-        drawdown_penalty = current_drawdown * 1e-4
+        drawdown_penalty = current_drawdown * 1e-2
 
         # 持仓集中度奖励
         position_bonus = 0.01 * (abs(self.rb_position) + 0.01 * (abs(self.hc_position)))
@@ -245,7 +244,7 @@ class LSTMActorCritic(nn.Module):
 class PPO_LSTM:
     def __init__(self, state_dim, action_dim, hidden_dim):
         self.policy = LSTMActorCritic(state_dim, action_dim, hidden_dim)
-        self.optimizer = optim.AdamW(self.policy.parameters(), lr=1e-4)
+        self.optimizer = optim.AdamW(self.policy.parameters(), lr=5e-2)
         self.eps_clip = 0.2
         self.gamma = 0.99
         self.gae_lambda = 0.95
