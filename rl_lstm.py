@@ -193,5 +193,5 @@ def train():
 
 
 # %%
-env, agent, training_logs = train()
+
 # %%

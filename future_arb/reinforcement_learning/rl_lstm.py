@@ -26,6 +26,8 @@ class SpreadTradingEnv:
         transaction_cost=10,  # 每手固定交易成本（元）
         slippage=100,  # 每手固定滑点成本（元）
         normalization_window=90,
+        cost_penalty_ratio = 1e-1,
+        drawdown_penalty_ratio = 1e-2,
         instrument_pair: Tuple[str, str] = ("RB", "HC"),
     ):
         self.data = data
@@ -85,23 +87,25 @@ class SpreadTradingEnv:
 
     def _update_hedge_ratio(self):
         """动态更新对冲比例（协整关系）"""
-        window_data = self.data.iloc[self.current_step - self.lookback_window : self.current_step]
+        # window_data = self.data.iloc[self.current_step - self.lookback_window : self.current_step]
 
-        # Step 1: Regress RB_prices on HC_prices
-        model = OLS(window_data["RB_prices"], window_data["HC_prices"])
-        result = model.fit()
-        hedge_ratio = result.params[0]
+        # # Step 1: Regress RB_prices on HC_prices
+        # model = OLS(window_data["RB_prices"], window_data["HC_prices"])
+        # result = model.fit()
+        # hedge_ratio = result.params[0]
 
-        # Step 2: Test for cointegration using ADF test on residuals
-        residuals = window_data["RB_prices"] - hedge_ratio * window_data["HC_prices"]
-        adf_test = adfuller(residuals)
+        # # Step 2: Test for cointegration using ADF test on residuals
+        # residuals = window_data["RB_prices"] - hedge_ratio * window_data["HC_prices"]
+        # adf_test = adfuller(residuals)
 
-        # If the residuals are stationary, update the hedge ratio
-        if adf_test[1] < 0.05:  # p-value < 0.05 indicates stationarity
-            self.hedge_ratio = hedge_ratio
-        else:
-            self.hedge_ratio = 1.0  # Default value if not cointegrated
+        # # If the residuals are stationary, update the hedge ratio
+        # if adf_test[1] < 0.05:  # p-value < 0.05 indicates stationarity
+        #     self.hedge_ratio = hedge_ratio
+        # else:
+        #     self.hedge_ratio = 1.0  # Default value if not cointegrated
 
+        self.hedge_ratio = 1.0
+        
     def reset(self):
         self.current_step = self.lookback_window
         self.rb_position = 0
@@ -209,10 +213,10 @@ class SpreadTradingEnv:
         risk_adj_return = pnl / (vol * self.contract_size + 1e-6)
 
         # 成本惩罚
-        cost_penalty = transaction_cost * 1e-1
+        cost_penalty = transaction_cost * self.cost_penalty_ratio
 
         # 回撤惩罚
-        drawdown_penalty = current_drawdown * 1e-2
+        drawdown_penalty = current_drawdown * self.drawdown_penalty_ratio
 
         # 持仓集中度奖励
         position_bonus = 0.01 * (abs(self.rb_position) + 0.01 * (abs(self.hc_position)))
