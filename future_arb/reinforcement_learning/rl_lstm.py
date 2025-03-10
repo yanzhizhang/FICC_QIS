@@ -34,12 +34,14 @@ class SpreadTradingEnv:
         self.feature_columns = data.columns.tolist()
         self.scaler = StandardScaler()
         self.current_step = lookback_window
+        self.lookback_window = lookback_window
         self.init_balance = init_balance
         self.contract_size = contract_size
         self.max_position = max_position
         self.max_drawdown = max_drawdown
         self.min_lots = min_lots
-        self.lookback_window = lookback_window
+        self.cost_penalty_ratio = cost_penalty_ratio
+        self.drawdown_penalty_ratio = drawdown_penalty_ratio
 
         # 交易成本参数
         self.transaction_cost = transaction_cost  # 元/手
